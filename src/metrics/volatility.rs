@@ -24,3 +24,8 @@ pub fn variance(returns: &[f64]) -> Result<f64, QuantError> {
 
     Ok(sum_sq / (n as f64 - 1.0))
 }
+
+pub fn volatility(returns: &[f64]) -> Result<f64, QuantError> {
+    let var = variance(returns)?;
+    Ok(var.sqrt())
+}
