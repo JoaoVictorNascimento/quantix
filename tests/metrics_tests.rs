@@ -2,6 +2,7 @@ use quant_rs::core::QuantError;
 use quant_rs::metrics::returns::{
     cumulative_from_returns, cumulative_log_return, cumulative_return, log_returns, simple_returns,
 };
+use quant_rs::metrics::drawdown::{drawdowns, max_drawdown, max_drawdown_duration};
 use quant_rs::metrics::sharpe::{annualized_sharpe_ratio, sharpe_ratio};
 use quant_rs::metrics::volatility::{annualized_volatility, variance, volatility};
 
@@ -437,5 +438,257 @@ fn annualized_sharpe_ratio_propagates_invalid_values() {
     assert!(matches!(
         annualized_sharpe_ratio(&[0.1, f64::NAN], 0.0, 252.0),
         Err(QuantError::InvalidValue(_))
+    ));
+}
+
+// ── drawdowns ─────────────────────────────────────────────────────────────────
+
+#[test]
+fn drawdowns_single_price() {
+    let dd = drawdowns(&[100.0]).unwrap();
+    assert_eq!(dd.len(), 1);
+    assert_approx_eq(dd[0], 0.0);
+}
+
+#[test]
+fn drawdowns_first_element_is_always_zero() {
+    let dd = drawdowns(&[50.0, 30.0, 80.0]).unwrap();
+    assert_approx_eq(dd[0], 0.0);
+}
+
+#[test]
+fn drawdowns_length_matches_input() {
+    let prices = &[100.0, 90.0, 110.0, 80.0, 120.0];
+    assert_eq!(drawdowns(prices).unwrap().len(), prices.len());
+}
+
+#[test]
+fn drawdowns_all_increasing() {
+    // nenhum preço fica abaixo do pico → todos os drawdowns são 0.0
+    let dd = drawdowns(&[100.0, 110.0, 120.0]).unwrap();
+    for d in &dd {
+        assert_approx_eq(*d, 0.0);
+    }
+}
+
+#[test]
+fn drawdowns_simple_drop() {
+    // pico = 100, cai para 80 → dd = 80/100 - 1 = -0.2
+    let dd = drawdowns(&[100.0, 80.0]).unwrap();
+    assert_approx_eq(dd[0], 0.0);
+    assert_approx_eq(dd[1], 80.0 / 100.0 - 1.0);
+}
+
+#[test]
+fn drawdowns_new_peak_resets_reference() {
+    // [100, 120, 90]: pico sobe para 120; dd de 90 = 90/120 - 1 = -0.25
+    let dd = drawdowns(&[100.0, 120.0, 90.0]).unwrap();
+    assert_approx_eq(dd[0], 0.0);
+    assert_approx_eq(dd[1], 0.0);
+    assert_approx_eq(dd[2], 90.0 / 120.0 - 1.0);
+}
+
+#[test]
+fn drawdowns_full_recovery() {
+    // [100, 80, 100]: recupera o pico → último dd = 0.0
+    let dd = drawdowns(&[100.0, 80.0, 100.0]).unwrap();
+    assert_approx_eq(dd[0], 0.0);
+    assert_approx_eq(dd[1], 80.0 / 100.0 - 1.0);
+    assert_approx_eq(dd[2], 0.0);
+}
+
+#[test]
+fn drawdowns_empty() {
+    assert!(matches!(drawdowns(&[]), Err(QuantError::InsufficientData)));
+}
+
+#[test]
+fn drawdowns_invalid_values() {
+    assert!(matches!(
+        drawdowns(&[100.0, f64::NAN]),
+        Err(QuantError::InvalidValue(_))
+    ));
+    assert!(matches!(
+        drawdowns(&[100.0, f64::INFINITY]),
+        Err(QuantError::InvalidValue(_))
+    ));
+}
+
+#[test]
+fn drawdowns_non_positive_price() {
+    assert!(matches!(
+        drawdowns(&[100.0, 0.0]),
+        Err(QuantError::NonPositivePrice(_))
+    ));
+    assert!(matches!(
+        drawdowns(&[100.0, -50.0]),
+        Err(QuantError::NonPositivePrice(_))
+    ));
+}
+
+// ── max_drawdown ──────────────────────────────────────────────────────────────
+
+#[test]
+fn max_drawdown_single_price() {
+    assert_approx_eq(max_drawdown(&[100.0]).unwrap(), 0.0);
+}
+
+#[test]
+fn max_drawdown_no_drawdown() {
+    // série monotonamente crescente → sem drawdown
+    assert_approx_eq(max_drawdown(&[100.0, 110.0, 120.0]).unwrap(), 0.0);
+}
+
+#[test]
+fn max_drawdown_simple() {
+    // pico = 100, mínimo = 80 → mdd = -0.2
+    assert_approx_eq(max_drawdown(&[100.0, 80.0]).unwrap(), 80.0 / 100.0 - 1.0);
+}
+
+#[test]
+fn max_drawdown_picks_worst_drop() {
+    // [100, 80, 90, 60]: drops de -0.2, -0.1, -0.4 → pior é -0.4
+    assert_approx_eq(
+        max_drawdown(&[100.0, 80.0, 90.0, 60.0]).unwrap(),
+        60.0 / 100.0 - 1.0,
+    );
+}
+
+#[test]
+fn max_drawdown_new_peak_then_drop() {
+    // [100, 150, 120]: pico sobe para 150; pior dd = 120/150 - 1 = -0.2
+    assert_approx_eq(
+        max_drawdown(&[100.0, 150.0, 120.0]).unwrap(),
+        120.0 / 150.0 - 1.0,
+    );
+}
+
+#[test]
+fn max_drawdown_consistent_with_drawdowns() {
+    let prices = &[100.0, 90.0, 120.0, 80.0, 110.0];
+    let mdd = max_drawdown(prices).unwrap();
+    let all_dd = drawdowns(prices).unwrap();
+    let min_dd = all_dd.iter().cloned().fold(f64::INFINITY, f64::min);
+    assert_approx_eq(mdd, min_dd);
+}
+
+#[test]
+fn max_drawdown_empty() {
+    assert!(matches!(
+        max_drawdown(&[]),
+        Err(QuantError::InsufficientData)
+    ));
+}
+
+#[test]
+fn max_drawdown_invalid_values() {
+    assert!(matches!(
+        max_drawdown(&[100.0, f64::NAN]),
+        Err(QuantError::InvalidValue(_))
+    ));
+}
+
+#[test]
+fn max_drawdown_non_positive_price() {
+    assert!(matches!(
+        max_drawdown(&[100.0, 0.0]),
+        Err(QuantError::NonPositivePrice(_))
+    ));
+    assert!(matches!(
+        max_drawdown(&[100.0, -10.0]),
+        Err(QuantError::NonPositivePrice(_))
+    ));
+}
+
+// ── max_drawdown_duration ─────────────────────────────────────────────────────
+
+#[test]
+fn max_drawdown_duration_single_price() {
+    assert_eq!(max_drawdown_duration(&[100.0]).unwrap(), 0);
+}
+
+#[test]
+fn max_drawdown_duration_no_drawdown() {
+    // série crescente → nunca fica abaixo do pico
+    assert_eq!(max_drawdown_duration(&[100.0, 110.0, 120.0]).unwrap(), 0);
+}
+
+#[test]
+fn max_drawdown_duration_one_period() {
+    // [100, 90]: 1 período abaixo do pico
+    assert_eq!(max_drawdown_duration(&[100.0, 90.0]).unwrap(), 1);
+}
+
+#[test]
+fn max_drawdown_duration_consecutive_drops() {
+    // [100, 90, 80, 70]: 3 períodos consecutivos abaixo do pico
+    assert_eq!(
+        max_drawdown_duration(&[100.0, 90.0, 80.0, 70.0]).unwrap(),
+        3
+    );
+}
+
+#[test]
+fn max_drawdown_duration_recovery_resets_counter() {
+    // [100, 90, 100, 90]: dois drawdowns de 1 período cada → max = 1
+    assert_eq!(
+        max_drawdown_duration(&[100.0, 90.0, 100.0, 90.0]).unwrap(),
+        1
+    );
+}
+
+#[test]
+fn max_drawdown_duration_longer_second_drawdown_wins() {
+    // [100, 90, 100, 80, 70]: primeiro dd = 1, segundo dd = 2 → max = 2
+    assert_eq!(
+        max_drawdown_duration(&[100.0, 90.0, 100.0, 80.0, 70.0]).unwrap(),
+        2
+    );
+}
+
+#[test]
+fn max_drawdown_duration_new_peak_resets_reference() {
+    // [100, 80, 120, 100]: pico sobe para 120; duração do primeiro dd = 1,
+    // depois nova queda de 100 < 120 também = 1 → max = 1
+    assert_eq!(
+        max_drawdown_duration(&[100.0, 80.0, 120.0, 100.0]).unwrap(),
+        1
+    );
+}
+
+#[test]
+fn max_drawdown_duration_exact_peak_price_resets() {
+    // preço igual ao pico (price >= peak) deve resetar o contador
+    assert_eq!(
+        max_drawdown_duration(&[100.0, 80.0, 100.0]).unwrap(),
+        1
+    );
+}
+
+#[test]
+fn max_drawdown_duration_empty() {
+    assert!(matches!(
+        max_drawdown_duration(&[]),
+        Err(QuantError::InsufficientData)
+    ));
+}
+
+#[test]
+fn max_drawdown_duration_invalid_values() {
+    assert!(matches!(
+        max_drawdown_duration(&[100.0, f64::NAN]),
+        Err(QuantError::InvalidValue(_))
+    ));
+}
+
+#[test]
+fn max_drawdown_duration_non_positive_price() {
+    assert!(matches!(
+        max_drawdown_duration(&[100.0, 0.0]),
+        Err(QuantError::NonPositivePrice(_))
+    ));
+    assert!(matches!(
+        max_drawdown_duration(&[100.0, -10.0]),
+        Err(QuantError::NonPositivePrice(_))
     ));
 }
