@@ -1,5 +1,6 @@
 use quant_rs::core::QuantError;
 use quant_rs::portfolio::portfolio::{Portfolio, Position};
+use quant_rs::portfolio::position::Position as PortfolioPosition;
 
 fn assert_approx_eq(a: f64, b: f64) {
     let eps = 1e-12_f64.max(a.abs().max(b.abs()) * 1e-12);
@@ -273,4 +274,78 @@ fn normalize_weights_empty_positions_is_division_by_zero() {
         portfolio.normalize_weights(),
         Err(QuantError::DivisionByZero)
     ));
+}
+
+// ── position_new ──────────────────────────────────────────────────────────────
+
+#[test]
+fn position_new_basic() {
+    let p = PortfolioPosition::new(0.5, vec![0.01, -0.02, 0.03]).unwrap();
+    assert_approx_eq(p.weight, 0.5);
+    assert_eq!(p.returns.len(), 3);
+    assert_approx_eq(p.returns[0], 0.01);
+    assert_approx_eq(p.returns[1], -0.02);
+    assert_approx_eq(p.returns[2], 0.03);
+}
+
+#[test]
+fn position_new_allows_zero_and_negative_weight() {
+    let p_zero = PortfolioPosition::new(0.0, vec![0.01]).unwrap();
+    let p_negative = PortfolioPosition::new(-1.0, vec![0.01]).unwrap();
+    assert_approx_eq(p_zero.weight, 0.0);
+    assert_approx_eq(p_negative.weight, -1.0);
+}
+
+#[test]
+fn position_new_invalid_weight_is_error() {
+    assert!(matches!(
+        PortfolioPosition::new(f64::NAN, vec![0.01, 0.02]),
+        Err(QuantError::InvalidValue(_))
+    ));
+    assert!(matches!(
+        PortfolioPosition::new(f64::INFINITY, vec![0.01, 0.02]),
+        Err(QuantError::InvalidValue(_))
+    ));
+}
+
+#[test]
+fn position_new_empty_returns_is_error() {
+    assert!(matches!(
+        PortfolioPosition::new(1.0, vec![]),
+        Err(QuantError::InsufficientData)
+    ));
+}
+
+#[test]
+fn position_new_invalid_return_is_error() {
+    assert!(matches!(
+        PortfolioPosition::new(1.0, vec![0.01, f64::NAN]),
+        Err(QuantError::InvalidValue(_))
+    ));
+    assert!(matches!(
+        PortfolioPosition::new(1.0, vec![0.01, f64::NEG_INFINITY]),
+        Err(QuantError::InvalidValue(_))
+    ));
+}
+
+// ── position_len ──────────────────────────────────────────────────────────────
+
+#[test]
+fn position_len_matches_returns_size() {
+    let p = PortfolioPosition::new(1.0, vec![0.01, 0.02, 0.03, 0.04]).unwrap();
+    assert_eq!(p.len(), 4);
+}
+
+#[test]
+fn position_len_single_value() {
+    let p = PortfolioPosition::new(1.0, vec![0.01]).unwrap();
+    assert_eq!(p.len(), 1);
+}
+
+// ── position_is_empty ─────────────────────────────────────────────────────────
+
+#[test]
+fn position_is_empty_is_false_for_valid_position() {
+    let p = PortfolioPosition::new(1.0, vec![0.01]).unwrap();
+    assert!(!p.is_empty());
 }
