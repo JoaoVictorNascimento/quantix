@@ -1,4 +1,4 @@
-# quant-rs
+# quantix
 
 A Rust library for quantitative finance, providing tools for financial metrics, portfolio analysis, trading strategies, and backtesting.
 
@@ -6,7 +6,7 @@ A Rust library for quantitative finance, providing tools for financial metrics, 
 
 ## 🚀 Overview
 
-`quant-rs` is designed to help developers and researchers analyze financial time series and evaluate trading strategies.
+`quantix` is designed to help developers and researchers analyze financial time series and evaluate trading strategies.
 
 It follows a modular pipeline:
 
@@ -55,8 +55,8 @@ Each layer builds on top of the previous one, enabling a clear and composable wo
 ## ⚡ Quick Example
 
 ```rust
-use quant_rs::strategy::moving_average_crossover_signals;
-use quant_rs::backtest::BacktestEngine;
+use quantix::strategy::moving_average_crossover_signals;
+use quantix::backtest::BacktestEngine;
 
 fn main() {
     let prices = vec![100.0, 102.0, 105.0, 103.0, 110.0, 115.0];
