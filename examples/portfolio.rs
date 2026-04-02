@@ -1,5 +1,5 @@
 use quantix::core::QuantError;
-use quantix::portfolio::portfolio::{Portfolio, Position as PortfolioPosition};
+use quantix::portfolio::{Portfolio, Position as PortfolioPosition};
 use quantix::portfolio::position::Position as ValidatedPosition;
 
 fn run_portfolio_returns_example() -> Result<(), QuantError> {

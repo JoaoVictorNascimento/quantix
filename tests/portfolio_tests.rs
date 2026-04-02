@@ -1,5 +1,5 @@
 use quantix::core::QuantError;
-use quantix::portfolio::portfolio::{Portfolio, Position};
+use quantix::portfolio::{Portfolio, Position};
 use quantix::portfolio::position::Position as PortfolioPosition;
 
 fn assert_approx_eq(a: f64, b: f64) {
